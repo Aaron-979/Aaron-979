@@ -1,120 +1,90 @@
-%%  清空环境变量
-warning off             % 关闭报警信息
-close all               % 关闭开启的图窗
-clear                   % 清空变量
-clc                     % 清空命令行
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%用于函数逼近的RBF神经网络
+% 采用单输入单输出的3层BP网络
+%基于聚类方法，RBF网隐层采用标准gaussian径向基函数，输出层采用线性激活函数即f(u)=u
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function main()
+clear;
+SamNum=100;                                                  %训练样本数
+TestSamNum=101;                                              %测试样本数
+ClusterNum=10;                                               %隐藏节点，即聚类样本数
+InDim=1;                                                     %样本输入维数
+OutDim=1;                                                    %样本输出维数
+Overlap=1;                                                   %隐节点重叠洗漱
 
-%%  导入数据
-res = xlsread('数据集.xlsx');
+% 导入Excel数据
+data = readtable('数据1.xlsx');
+SamIn = table2array(data(:, 1:6)); 
+SamOut = table2array(data(:, 7)); % 假设第7列是输出
 
-%%  划分训练集和测试集
-temp = randperm(12900);
-
-P_train = res(temp(1: 6000), 1: 10)';
-T_train = res(temp(1: 6000), 11)';
-M = size(P_train, 2);
-
-P_test = res(temp(6001: end), 1: 10)';
-T_test = res(temp(6001: end), 11)';
-N = size(P_test, 2);
-
-%%  数据归一化
-[p_train, ps_input] = mapminmax(P_train, 0, 1);
-p_test = mapminmax('apply', P_test, ps_input);
-
-[t_train, ps_output] = mapminmax(T_train, 0, 1);
-t_test = mapminmax('apply', T_test, ps_output);
-
-%%  创建网络
-net = newff(p_train, t_train, 5);
-
-%%  设置训练参数
-net.trainParam.epochs = 2000;     % 迭代次数 
-net.trainParam.goal = 1e-6;       % 误差阈值
-net.trainParam.lr = 0.01;         % 学习率
-
-%%  训练网络
-net= train(net, p_train, t_train);
-
-%%  仿真测试
-t_sim1 = sim(net, p_train);
-t_sim2 = sim(net, p_test );
-
-%%  数据反归一化
-T_sim1 = mapminmax('reverse', t_sim1, ps_output);
-T_sim2 = mapminmax('reverse', t_sim2, ps_output);
-
-%%  均方根误差
-error1 = sqrt(sum((T_sim1 - T_train).^2) ./ M);
-error2 = sqrt(sum((T_sim2 - T_test ).^2) ./ N);
-
-%%  绘图
-figure
-plot(1: M, T_train, 'r-*', 1: M, T_sim1, 'b-o', 'LineWidth', 1)
-legend('真实值', '预测值')
-xlabel('预测样本')
-ylabel('预测结果')
-string = {strcat('训练集预测结果对比：', ['RMSE=' num2str(error1)])};
-title(string)
-xlim([1, M])
+%%根据目标函数获得样本输入输出
+rand('state',sum(100*clock));
+NoiseVar=0.1;
+noise=NoiseVar*randn(1,SamNum);
+SamIn=8*rand(1,SamNum)-4;
+SamOutNoNoise=1.1*(1-SamIn+2*SamIn.^2).*exp(-SamIn.^2/2);
+SamOut=SamOutNoNoise+noise;
+TestSamIn=-4:0.08:4;
+TestSamOut=1.1*(1-TestSamIn+2*TestSamIn.^2).*exp(-TestSamIn.^2/2);
+hold on;
 grid
+plot(SamIn,SamOut,'k+');
+plot(TestSamIn,TestSamOut,'k--');
+xlabel('Input x');
+ylabel('Output y');
 
-figure
-plot(1: N, T_test, 'r-*', 1: N, T_sim2, 'b-o', 'LineWidth', 1)
-legend('真实值', '预测值')
-xlabel('预测样本')
-ylabel('预测结果')
-string = {strcat('测试集预测结果对比：', ['RMSE=' num2str(error2)])};
-title(string)
-xlim([1, N])
-grid
+%%RBF神经网络部分
+Centers=SamIn(:,1:ClusterNum);
+NumberInClusters=zeros(ClusterNum,1);               %各类中的样本数，初始化为零
+IndexClusters=zeros(ClusterNum,SamNum);             %各类所含样本的索引号
+while 1,
+    NumberInClusters=zeros(ClusterNum,1);           %各类中的样本数，初始化为零
+    IndexClusters=zeros(ClusterNum,SamNum);         %各类所含样本的索引号
+    %按最小距离原则对所有的样本进行分类
+    for i=1:SamNum
+        AllDistance=dist(Centers',SamIn(:,i));
+        [MinDist,Pos]=min(AllDistance);
+        NumberInClusters(Pos)=NumberInClusters(Pos)+1;
+        IndexInClusters(Pos,NumberInClusters(Pos))=i;
+    end
+    
+   %保存旧的聚类中心
+   OldCenters=Centers;
+   
+   %保存旧的聚类中心
+   for i=1:ClusterNum
+       Index=IndexInClusters(i,1:NumberInClusters(i));
+       Centers(:,i)=mean(SamIn(:,Index)')';
+   end
+     
+   %判断新旧聚类中心是否一致，如果是，则结束聚类
+   EqualNum=sum(sum(Centers==OldCenters));
+   if EqualNum==InDim*ClusterNum,break,end
+end
 
-%%  相关指标计算
-%  R2
-R1 = 1 - norm(T_train - T_sim1)^2 / norm(T_train - mean(T_train))^2;
-R2 = 1 - norm(T_test -  T_sim2)^2 / norm(T_test  - mean(T_test ))^2;
+%计算各隐节点的扩展常数(宽度)
+AllDistances=dist(Centers',Centers);    %计算隐节点数据中心的距离（矩阵）
+Maximum=max(max(AllDistances));         %找出其中最大的一个距离
+for i=1:ClusterNum                      %将对角线上的0替换为较大的值
+    AllDistances(i,i)=Maximum+1;
+end
+Spreads=Overlap*min(AllDistances)';     %以隐节点的最小距离为扩展常数
 
-disp(['训练集数据的R2为：', num2str(R1)])
-disp(['测试集数据的R2为：', num2str(R2)])
+% 计算各隐节点的输出权值
+Distance=dist(Centers',SamIn);          %计算各样本输入离各数据中心的距离
+SpreadsMat=repmat(Spreads,1,SamNum);
+HiddenUnitOut=radbas(Distance./SpreadsMat);                %计算隐节点输阵
+HiddenUnitOutEx=[HiddenUnitOut' ones(SamNum,1)]';          %考虑偏移
+W2Ex=SamOut*pinv(HiddenUnitOutEx);                         %求广义输出权值
+W2=W2Ex(:,1:ClusterNum);                                  %输出权值
+B2=W2Ex(:,ClusterNum+1)                                   %偏移;
 
-%  MAE
-mae1 = sum(abs(T_sim1 - T_train)) ./ M ;
-mae2 = sum(abs(T_sim2 - T_test )) ./ N ;
+% 测试
+TestDistance=dist(Centers',TestSamIn);
+TestSpreadsMat=repmat(Spreads,1,TestSamNum);
+TestHiddenUnitOut=radbas(TestDistance./TestSpreadsMat);
+TestNNOut= W2*TestHiddenUnitOut+B2;
+plot(TestSamIn,TestNNOut,'r-.')
 
-disp(['训练集数据的MAE为：', num2str(mae1)])
-disp(['测试集数据的MAE为：', num2str(mae2)])
-
-%  MBE
-mbe1 = sum(T_sim1 - T_train) ./ M ;
-mbe2 = sum(T_sim2 - T_test ) ./ N ;
-
-disp(['训练集数据的MBE为：', num2str(mbe1)])
-disp(['测试集数据的MBE为：', num2str(mbe2)])
-
-%  RMSE
-disp(['训练集数据的RMSE为：', num2str(error1)])
-disp(['测试集数据的RMSE为：', num2str(error2)])
-
-%%  绘制散点图
-sz = 25;
-c = 'b';
-
-figure
-scatter(T_train, T_sim1, sz, c)
-hold on
-plot(xlim, ylim, '--k')
-xlabel('训练集真实值');
-ylabel('训练集预测值');
-xlim([min(T_train) max(T_train)])
-ylim([min(T_sim1) max(T_sim1)])
-title('训练集预测值 vs. 训练集真实值')
-
-figure
-scatter(T_test, T_sim2, sz, c)
-hold on
-plot(xlim, ylim, '--k')
-xlabel('测试集真实值');
-ylabel('测试集预测值');
-xlim([min(T_test) max(T_test)])
-ylim([min(T_sim2) max(T_sim2)])
-title('测试集预测值 vs. 测试集真实值')
+W2
+B2
