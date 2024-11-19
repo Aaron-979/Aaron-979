@@ -4,7 +4,7 @@ close all; clear; clc;
 
 %% 输入参数（并打印它们）
 
-k = 2;     % 聚类数量
+k = 3;     % 聚类数量
 fprintf('k-Means将使用%d个聚类运行。\n', k);
 
 %% 从Excel表格读取数据
@@ -15,7 +15,7 @@ data = readtable('数据1.xlsx');
 % 提取前三列数据用于聚类，并转置为行向量
 points = data{:, 1:3}'; % 假设Excel表格中的数据在前三列
 
-%%%%定义函数
+%%定义函数
 function s = silhouette_coefficient(X, labels)
     % X: data points, n-by-m matrix (n points, m dimensions)
     % labels: cluster labels, n-by-1 array
