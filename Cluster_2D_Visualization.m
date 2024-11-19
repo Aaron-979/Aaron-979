@@ -18,9 +18,14 @@ points = data{:, 1:3}'; % 假设Excel表格中的数据在前三列
 %% 运行kMeans.m并测量/打印性能
 
 tic;
-[cluster, centr, mySSE] = kMeans(k, points); % 我的k-means
+[cluster, centr, mySSE, silhouette_values] = kMeans(k, points); % 我的k-means
 myPerform = toc;
 fprintf('kMeans.m的计算时间：%d秒。\n', myPerform);
+
+%% 输出平均轮廓系数
+
+mean_silhouette = mean(silhouette_values);
+fprintf('自己实现的k-means的平均轮廓系数：%.2f\n', mean_silhouette);
 
 %% 运行MATLAB的函数kmeans(P,k)并测量/打印性能
 
