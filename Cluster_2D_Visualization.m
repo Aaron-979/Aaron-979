@@ -12,8 +12,9 @@ fprintf('k-Means将使用%d个聚类运行。\n', k);
 % 读取Excel表格数据
 data = readtable('数据1.xlsx');
 
-% 提取第二列数据用于聚类
-points = data{:, 2}; % 假设Excel表格中的数据在第二列
+% 提取第二列数据用于聚类，并转置为行向量
+points = data{:, 2}'; % 假设Excel表格中的数据在第二列
+points = [points; zeros(1, length(points))]; % 将数据转换为2D矩阵
 
 %% 运行kMeans.m并测量/打印性能
 
